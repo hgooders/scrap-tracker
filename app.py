@@ -804,3 +804,33 @@ def import_():
 
 if __name__ == "__main__":
     app.run()
+def make_bar_data(items, key):
+
+    counts = {}
+
+    for i in items:
+
+        value = i.get(key)
+
+        if value:
+
+            counts[value] = counts.get(value, 0) + 1
+
+    max_val = max(counts.values()) if counts else 1
+
+    bars = []
+
+    for name, val in sorted(counts.items()):
+
+        bars.append({
+
+            "label": name,
+
+            "value": val,
+
+            "percent": int((val / max_val) * 100)
+
+        })
+
+    return bars
+ 
