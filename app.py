@@ -412,7 +412,48 @@ APP_HTML = """
             </tbody>
           </table>
         </div>
+        <div class="hr"></div>
+<h2>Bar charts</h2>
+<div class="split">
+<div>
+<div class="mini">By Line (filtered)</div>
 
+    {% for b in line_bars %}
+<div style="margin: 10px 0;">
+<div class="k">{{ b.label }} — <b>{{ b.value }}</b></div>
+<div style="background:#1b2646;border-radius:8px;overflow:hidden;">
+<div style="height:18px;width:{{ b.percent }}%;background:#4f7cff;"></div>
+</div>
+</div>
+
+    {% endfor %}
+
+    {% if not line_bars %}
+<div class="muted">No data to chart.</div>
+
+    {% endif %}
+</div>
+<div>
+<div class="mini">By Shift (filtered)</div>
+
+    {% for b in shift_bars %}
+<div style="margin: 10px 0;">
+<div class="k">{{ b.label }} — <b>{{ b.value }}</b></div>
+<div style="background:#1b2646;border-radius:8px;overflow:hidden;">
+<div style="height:18px;width:{{ b.percent }}%;background:#34d399;"></div>
+</div>
+</div>
+
+    {% endfor %}
+
+    {% if not shift_bars %}
+<div class="muted">No data to chart.</div>
+
+    {% endif %}
+</div>
+</div>
+ 
+       
       </div>
     </div>
 
@@ -620,7 +661,7 @@ def home():
         filters=filters,
         totals=totals,
         line_bars=line_bars,
-        shift_bars=shift_bars,
+        shift_bars=shift_bars
     )
 
 @app.post("/add")
