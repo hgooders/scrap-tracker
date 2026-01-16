@@ -598,6 +598,9 @@ def home():
         "comments": r["comments"],
     } for r in rows]
 
+    line_bars = make_bar_data(items, "line")
+    shift_bars = make_bar_data(items, "shift")
+    
     t = totals_for(rows)
     totals = {
         "total": total_all,
@@ -616,6 +619,8 @@ def home():
         shift_options=shift_options,
         filters=filters,
         totals=totals
+        line_bars=line_bars,
+shift_bars=shift_bars,
     )
 
 @app.post("/add")
