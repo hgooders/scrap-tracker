@@ -618,9 +618,9 @@ def home():
         line_options=line_options,
         shift_options=shift_options,
         filters=filters,
-        totals=totals
+        totals=totals,
         line_bars=line_bars,
-shift_bars=shift_bars,
+        shift_bars=shift_bars,
     )
 
 @app.post("/add")
