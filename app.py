@@ -2,8 +2,6 @@ import os
 
 import sqlite3
 
-import json
-
 import csv
 
 import io
@@ -20,20 +18,23 @@ from flask import (
 
 app = Flask(__name__)
 
-# IMPORTANT:
+# Set these in Render → Environment
 
-# - Set SECRET_KEY and TRACKER_PASSWORD in Render Environment
-
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret")
 
 TRACKER_PASSWORD = os.getenv("TRACKER_PASSWORD", "changeme")
 
+# Dropdown options (edit these freely)
+
+LINE_OPTIONS = ["TRIM 1", "TRIM 2", "CHASSIS 1", "CHASSIS 2", "CHASSIS 3", "FINAL 1", "FINAL 2", "DOORLINE", "IP LINE", "ENGINE LINE", ]
+
+SHIFT_OPTIONS = ["BLUE", "RED", ]
+
 LOGIN_HTML = """
-<h1>My Tracker</h1>
-<h2>Login</h2>
-<form method="post" action="/login">
+<h1>Tracker</h1>
+<form method="post">
 <input type="password" name="password" placeholder="Password" required>
-<button type="submit">Login</button>
+<button>Login</button>
 </form>
 
 {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
@@ -41,29 +42,56 @@ LOGIN_HTML = """
 """
 
 APP_HTML = """
-<h1>My Tracker</h1>
-<p>
-<a href="/logout">Logout</a>
-</p>
-<form method="post" action="/add">
-<input name="text" placeholder="Type something to track..." required style="width:360px;">
+<h1>Tracker</h1>
+<p><a href="/logout">Logout</a></p>
+<h2>Add Entry</h2>
+<form method="post" action="/add"
+
+      style="border:1px solid #ccc;padding:12px;border-radius:8px;max-width:900px;">
+<label><b>Parts</b></label><br>
+<input name="parts" required style="width:100%;padding:8px;"><br><br>
+<label><b>Line</b></label><br>
+<select name="line" required style="width:100%;padding:8px;">
+
+    {% for l in line_options %}
+<option value="{{ l }}">{{ l }}</option>
+
+    {% endfor %}
+</select>
+<br><br>
+<label><b>Reason</b></label><br>
+<input name="reason" required style="width:100%;padding:8px;"><br><br>
+<label><b>Sequence Number</b></label><br>
+<input name="sequence" type="number"
+
+         required style="width:100%;padding:8px;"><br><br>
+<label><b>Shift</b></label><br>
+<select name="shift" required style="width:100%;padding:8px;">
+
+    {% for s in shift_options %}
+<option value="{{ s }}">{{ s }}</option>
+
+    {% endfor %}
+</select>
+<br><br>
 <button type="submit">Add</button>
 </form>
 <p style="margin-top:12px;">
-<a href="/export.csv"><button type="button">Download CSV (Excel)</button></a>
-<a href="/export.json"><button type="button">Download JSON backup</button></a>
+<a href="/export.csv"><button type="button">Download CSV</button></a>
 </p>
-<form method="post" action="/import" enctype="multipart/form-data" style="margin-top:10px;">
-<input type="file" name="file" accept="application/json" required>
-<button type="submit">Restore JSON backup</button>
-</form>
 <ul style="margin-top:16px;">
 
-  {% for item in items %}
-<li>{{ item[1] }}
-<form method="post" action="/delete/{{ item[0] }}" style="display:inline;">
-<button type="submit">X</button>
-</form>
+  {% for i in items %}
+<li>
+<b>{{ i[1] }}</b> |
+
+      Line: {{ i[2] }} |
+
+      Reason: {{ i[3] }} |
+
+      Seq: {{ i[4] }} |
+
+      Shift: {{ i[5] }}
 </li>
 
   {% endfor %}
@@ -75,7 +103,25 @@ def db():
 
     conn = sqlite3.connect("data.db")
 
-    conn.execute("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, text TEXT)")
+    conn.execute("""
+
+      CREATE TABLE IF NOT EXISTS items (
+
+        id INTEGER PRIMARY KEY,
+
+        parts TEXT,
+
+        line TEXT,
+
+        reason TEXT,
+
+        sequence INTEGER,
+
+        shift TEXT
+
+      )
+
+    """)
 
     return conn
 
@@ -93,25 +139,21 @@ def login_required(fn):
 
     return wrapper
 
-@app.get("/login")
+@app.route("/login", methods=["GET", "POST"])
 
 def login():
 
+    if request.method == "POST":
+
+        if request.form["password"] == TRACKER_PASSWORD:
+
+            session["logged_in"] = True
+
+            return redirect("/")
+
+        return render_template_string(LOGIN_HTML, error="Wrong password")
+
     return render_template_string(LOGIN_HTML, error=None)
-
-@app.post("/login")
-
-def login_post():
-
-    pw = request.form.get("password", "")
-
-    if pw == TRACKER_PASSWORD:
-
-        session["logged_in"] = True
-
-        return redirect("/")
-
-    return render_template_string(LOGIN_HTML, error="Wrong password.")
 
 @app.get("/logout")
 
@@ -129,11 +171,25 @@ def home():
 
     conn = db()
 
-    items = conn.execute("SELECT id, text FROM items ORDER BY id DESC").fetchall()
+    items = conn.execute(
+
+        "SELECT id, parts, line, reason, sequence, shift FROM items ORDER BY id DESC"
+
+    ).fetchall()
 
     conn.close()
 
-    return render_template_string(APP_HTML, items=items)
+    return render_template_string(
+
+        APP_HTML,
+
+        items=items,
+
+        line_options=LINE_OPTIONS,
+
+        shift_options=SHIFT_OPTIONS
+
+    )
 
 @app.post("/add")
 
@@ -141,59 +197,33 @@ def home():
 
 def add():
 
-    text = request.form["text"]
-
     conn = db()
 
-    conn.execute("INSERT INTO items (text) VALUES (?)", (text,))
+    conn.execute(
 
-    conn.commit()
+        "INSERT INTO items (parts, line, reason, sequence, shift) VALUES (?, ?, ?, ?, ?)",
 
-    conn.close()
+        (
 
-    return redirect("/")
+            request.form["parts"],
 
-@app.post("/delete/<int:item_id>")
+            request.form["line"],
 
-@login_required
+            request.form["reason"],
 
-def delete(item_id):
+            request.form["sequence"],
 
-    conn = db()
+            request.form["shift"],
 
-    conn.execute("DELETE FROM items WHERE id=?", (item_id,))
-
-    conn.commit()
-
-    conn.close()
-
-    return redirect("/")
-
-@app.get("/export.json")
-
-@login_required
-
-def export_json():
-
-    conn = db()
-
-    rows = conn.execute("SELECT id, text FROM items ORDER BY id ASC").fetchall()
-
-    conn.close()
-
-    data = [{"id": r[0], "text": r[1]} for r in rows]
-
-    payload = json.dumps(data, ensure_ascii=False, indent=2)
-
-    return Response(
-
-        payload,
-
-        mimetype="application/json",
-
-        headers={"Content-Disposition": "attachment; filename=tracker-backup.json"},
+        ),
 
     )
+
+    conn.commit()
+
+    conn.close()
+
+    return redirect("/")
 
 @app.get("/export.csv")
 
@@ -203,7 +233,11 @@ def export_csv():
 
     conn = db()
 
-    rows = conn.execute("SELECT id, text FROM items ORDER BY id ASC").fetchall()
+    rows = conn.execute(
+
+        "SELECT parts, line, reason, sequence, shift FROM items ORDER BY id ASC"
+
+    ).fetchall()
 
     conn.close()
 
@@ -211,11 +245,11 @@ def export_csv():
 
     writer = csv.writer(output)
 
-    writer.writerow(["id", "text"])
+    writer.writerow(["Parts", "Line", "Reason", "Sequence", "Shift"])
 
     for r in rows:
 
-        writer.writerow([r[0], r[1]])
+        writer.writerow(r)
 
     return Response(
 
@@ -226,34 +260,6 @@ def export_csv():
         headers={"Content-Disposition": "attachment; filename=tracker.csv"},
 
     )
-
-@app.post("/import")
-
-@login_required
-
-def import_():
-
-    f = request.files.get("file")
-
-    if not f:
-
-        return redirect("/")
-
-    data = json.loads(f.read().decode("utf-8"))
-
-    conn = db()
-
-    conn.execute("DELETE FROM items")
-
-    for row in data:
-
-        conn.execute("INSERT INTO items (id, text) VALUES (?, ?)", (row["id"], row["text"]))
-
-    conn.commit()
-
-    conn.close()
-
-    return redirect("/")
 
 if __name__ == "__main__":
 
